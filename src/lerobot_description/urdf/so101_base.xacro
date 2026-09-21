@@ -7,6 +7,7 @@
 -->
 
 <robot name="so101_rail" xmlns:xacro="http://www.ros.org/wiki/xacro">
+	<xacro:include filename="$(find lerobot_description)/urdf/gemini2_camera.xacro" />
 
 	<!--
 		Rail geometry is provisional until the assembled CAD model is available.
@@ -22,6 +23,18 @@
 	<xacro:arg name="rail_mount_roll" default="0.0" />
 	<xacro:arg name="rail_mount_pitch" default="0.0" />
 	<xacro:arg name="rail_mount_yaw" default="0.0" />
+
+	<!--
+		PROVISIONAL Gemini 2 mount transform. Replace these zero placeholders
+		with the measured gripper-to-camera rigid transform before using point
+		clouds for world-coordinate perception.
+	-->
+	<xacro:arg name="camera_mount_x" default="0.0" />
+	<xacro:arg name="camera_mount_y" default="0.0" />
+	<xacro:arg name="camera_mount_z" default="0.0" />
+	<xacro:arg name="camera_mount_roll" default="0.0" />
+	<xacro:arg name="camera_mount_pitch" default="0.0" />
+	<xacro:arg name="camera_mount_yaw" default="0.0" />
 
 	<!-- Fixed world and provisional X rail. -->
 	<link name="world" />
@@ -442,6 +455,12 @@
 		<child link="tcp" />
 		<origin xyz="0 0 -0.090" rpy="3.14159 0 1.5708" />
 	</joint>
+
+	<!-- Eye-in-hand RGB-D camera; optical child frames come from orbbec_camera. -->
+	<xacro:gemini2_camera
+		parent="gripper"
+		xyz="$(arg camera_mount_x) $(arg camera_mount_y) $(arg camera_mount_z)"
+		rpy="$(arg camera_mount_roll) $(arg camera_mount_pitch) $(arg camera_mount_yaw)" />
 
 	<!-- Joint from gripper to jaw -->
 	<joint name="6" type="revolute">

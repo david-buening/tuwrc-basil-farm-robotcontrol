@@ -4,7 +4,13 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    LogInfo,
+    OpaqueFunction,
+)
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -19,10 +25,18 @@ def launch_setup(context):
     use_rviz = LaunchConfiguration("use_rviz").perform(context).lower() == "true"
     use_moveit = LaunchConfiguration("use_moveit").perform(context).lower() == "true"
     use_gui = LaunchConfiguration("use_gui").perform(context).lower() == "true"
+    use_camera = LaunchConfiguration("use_camera").perform(context).lower() == "true"
+    if use_camera and mode != "hardware":
+        raise RuntimeError(
+            "use_camera=true requires mode=hardware so eye-in-hand point clouds "
+            "use the real arm pose"
+        )
+
     port = LaunchConfiguration("port").perform(context)
     gui_port = LaunchConfiguration("gui_port").perform(context)
     mock_rate = float(LaunchConfiguration("mock_rate").perform(context))
 
+    bringup_share = Path(get_package_share_directory("tuwrc_bringup"))
     desc_share = Path(get_package_share_directory("lerobot_description"))
     driver_share = Path(get_package_share_directory("six_motor_driver"))
     moveit_share = Path(get_package_share_directory("six_motor_moveit_config"))
@@ -143,6 +157,22 @@ def launch_setup(context):
             )
         )
 
+    if use_camera:
+        actions.append(
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    str(bringup_share / "launch" / "gemini2.launch.py")
+                ),
+                launch_arguments={
+                    "serial_number": LaunchConfiguration("camera_serial"),
+                    "usb_port": LaunchConfiguration("camera_usb_port"),
+                    "enable_colored_point_cloud": LaunchConfiguration(
+                        "enable_colored_point_cloud"
+                    ),
+                }.items(),
+            )
+        )
+
     return actions
 
 
@@ -157,6 +187,17 @@ def generate_launch_description():
             DeclareLaunchArgument("use_rviz", default_value="true"),
             DeclareLaunchArgument("use_moveit", default_value="true"),
             DeclareLaunchArgument("use_gui", default_value="true"),
+            DeclareLaunchArgument(
+                "use_camera",
+                default_value="false",
+                description="Start the physical gripper-mounted Gemini 2.",
+            ),
+            DeclareLaunchArgument("camera_serial", default_value=""),
+            DeclareLaunchArgument("camera_usb_port", default_value=""),
+            DeclareLaunchArgument(
+                "enable_colored_point_cloud",
+                default_value="false",
+            ),
             DeclareLaunchArgument("port", default_value="/dev/ttyACM0"),
             DeclareLaunchArgument("gui_port", default_value="3000"),
             DeclareLaunchArgument(

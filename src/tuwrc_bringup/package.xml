@@ -21,6 +21,7 @@
   <exec_depend>tuwrc_mock_hardware</exec_depend>
   <exec_depend>moveit_ros_move_group</exec_depend>
   <exec_depend>moveit_configs_utils</exec_depend>
+  <exec_depend>orbbec_camera</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

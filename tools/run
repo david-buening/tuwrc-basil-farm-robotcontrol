@@ -11,6 +11,8 @@ PORT="/dev/ttyACM0"
 USE_RVIZ="true"
 USE_MOVEIT="true"
 USE_GUI="true"
+USE_CAMERA="false"
+ENABLE_COLORED_POINT_CLOUD="false"
 VNC_GEOMETRY="${TUWRC_VNC_GEOMETRY:-1600x900}"
 
 usage() {
@@ -24,6 +26,8 @@ Options:
   --no-rviz                do not start RViz
   --no-moveit              do not start MoveIt
   --no-gui                 do not start the browser GUI
+  --camera                 start the physical gripper-mounted Gemini 2
+  --colored-point-cloud    also publish the registered RGB point cloud
   --geometry WxH           noVNC desktop size, Docker only (default: 1600x900)
   -h, --help               show this help
 
@@ -46,6 +50,12 @@ while [[ $# -gt 0 ]]; do
     --no-rviz) USE_RVIZ="false"; shift ;;
     --no-moveit) USE_MOVEIT="false"; shift ;;
     --no-gui) USE_GUI="false"; shift ;;
+    --camera) USE_CAMERA="true"; shift ;;
+    --colored-point-cloud)
+      USE_CAMERA="true"
+      ENABLE_COLORED_POINT_CLOUD="true"
+      shift
+      ;;
     --geometry) VNC_GEOMETRY="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
@@ -54,6 +64,11 @@ done
 
 if [[ "$MODE" != "view" && "$MODE" != "hardware" ]]; then
   echo "mode must be view or hardware" >&2
+  exit 1
+fi
+
+if [[ "$USE_CAMERA" == "true" && "$MODE" != "hardware" ]]; then
+  echo "--camera requires --mode hardware so the point cloud uses the real arm pose." >&2
   exit 1
 fi
 
@@ -109,11 +124,18 @@ run_native() {
   fi
   # shellcheck disable=SC1091
   source "$ROOT/install/setup.bash"
+  if [[ "$USE_CAMERA" == "true" ]] && ! ros2 pkg prefix orbbec_camera >/dev/null 2>&1; then
+    echo "orbbec_camera is not installed in this workspace." >&2
+    echo "Follow the Gemini 2 setup steps in README.md, then rebuild with colcon." >&2
+    exit 1
+  fi
   exec ros2 launch tuwrc_bringup robot.launch.py \
     mode:="$MODE" \
     use_rviz:="$USE_RVIZ" \
     use_moveit:="$USE_MOVEIT" \
     use_gui:="$USE_GUI" \
+    use_camera:="$USE_CAMERA" \
+    enable_colored_point_cloud:="$ENABLE_COLORED_POINT_CLOUD" \
     port:="$PORT"
 }
 

@@ -133,6 +133,90 @@ ls /dev/ttyACM* /dev/ttyUSB*
 
 Then open the GUI at [http://localhost:3000](http://localhost:3000). RViz opens as a normal Linux window.
 
+### Orbbec Gemini 2 depth camera
+
+The supported deployment keeps all live robot I/O on a native Ubuntu 24.04
+computer connected directly to the arm and Gemini 2. It uses Orbbec's ROS 2
+driver pinned in `dependencies/orbbec.repos`.
+
+- **Ubuntu robot computer:** run the arm driver, camera driver, TF, MoveIt and
+  point-cloud consumers.
+- **macOS development computer:** edit the shared repository and use Docker
+  `view` mode with mock joints. Recorded camera data can be replayed here for
+  later perception development.
+
+Docker Desktop cannot pass the camera through with a normal `--device` mapping
+because containers run inside a Linux VM. USB/IP can sometimes bridge USB
+devices into that VM, but it is not part of the supported workflow: the Gemini
+2's high-bandwidth RGB-D streams have not been validated over that path.
+Likewise, the Orbbec SDK supports macOS, but its ROS 2 wrapper documents Linux
+as the supported platform.
+
+One-time source and system setup:
+
+```bash
+sudo apt update
+sudo apt install python3-vcstool libgflags-dev nlohmann-json3-dev \
+  libdw-dev libssl-dev libgoogle-glog-dev \
+  ros-jazzy-image-transport ros-jazzy-image-transport-plugins \
+  ros-jazzy-compressed-image-transport ros-jazzy-image-publisher \
+  ros-jazzy-camera-info-manager ros-jazzy-diagnostic-updater \
+  ros-jazzy-diagnostic-msgs ros-jazzy-statistics-msgs \
+  ros-jazzy-backward-ros
+
+vcs import . < dependencies/orbbec.repos
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+# Required once for non-root USB access, then unplug/reconnect the camera.
+sudo bash src/OrbbecSDK_ROS2/orbbec_camera/scripts/install_udev_rules.sh
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Use a data-capable USB 3 cable and update the Gemini 2 to Orbbec's recommended
+firmware `1.4.98`. Verify discovery before starting the arm:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+ros2 run orbbec_camera list_devices_node
+```
+
+Start the real arm and depth point cloud:
+
+```bash
+./tools/run --mode hardware --runtime native --camera
+
+# Optional additional RGB-colored registered cloud:
+./tools/run --mode hardware --runtime native --colored-point-cloud
+```
+
+Expected camera outputs include:
+
+- `/camera/color/image_raw` and `/camera/color/camera_info`
+- `/camera/depth/image_raw` and `/camera/depth/camera_info`
+- `/camera/depth/points`
+- `/camera/depth_registered/points` when `--colored-point-cloud` is used
+
+In RViz, add a `PointCloud2` display for `/camera/depth/points` and use `world`
+as the fixed frame. If the cloud follows the gripper but is offset or rotated
+incorrectly, replace the provisional `camera_mount_*` values near the top of
+`src/lerobot_description/urdf/so101_base.xacro` with the measured
+`gripper`-to-`camera_link` transform. The current zero values are placeholders
+and are not suitable for world-coordinate perception.
+
+Camera troubleshooting:
+
+- `Permission denied` or no device: rerun the udev setup, reconnect the camera,
+  and do not run the ROS node with `sudo`.
+- USB 3 detection or missing streams: change the cable/port and avoid hubs.
+- Point cloud exists but RViz cannot transform it: confirm
+  `gripper -> camera_link` and the driver's optical frames are present in TF.
+- High bandwidth/CPU: leave the colored cloud disabled and select lower
+  resolution/FPS through `tuwrc_bringup/launch/gemini2.launch.py`.
+
 ## Safe first movements
 
 In **view** mode, use the browser GUI:
@@ -166,6 +250,7 @@ handles Docker vs native ROS env setup for you:
 tuwrc-basil-farm-robotcontrol/
 ├── README.md                 ← you are here
 ├── CONTRIBUTING.md           ← branch/PR rules
+├── dependencies/             ← pinned third-party ROS source manifests
 ├── Dockerfile                ← ROS 2 Jazzy + noVNC image
 ├── docker-compose.yml
 ├── docker/                   ← container entrypoint
